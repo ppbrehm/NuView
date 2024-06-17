@@ -51,7 +51,7 @@ left join user_unit uu
 )
 
 -- Calculate completion for each unit
--- If unit completion > 100, unit passed
+-- If unit completion >= 100, unit passed
 -- If unit competion is not null, unit has been taken by user
 -- If unit is under a course that has been taken by user, unit is an assigned unit
 ,calcs as (
