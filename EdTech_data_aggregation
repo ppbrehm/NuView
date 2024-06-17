@@ -17,17 +17,21 @@ select distinct
 --Units that each user has taken, and max scores for each
 ,user_unit as (
 select 
-  user_id
-  ,unit_id
-  ,max(overall_completion_percentage) as max_score
-from `EdTech_Data.day_wise_user_activity` 
-group by 1,2
+  bd.user_id
+  ,bd.referral_source
+  ,ua.unit_id
+  ,max(ua.overall_completion_percentage) as max_score
+from `EdTech_Data.users_basic_details` bd
+left join `EdTech_Data.day_wise_user_activity`  ua
+  on bd.user_id = ua.user_id
+group by 1,2,3
 )
 
 -- Join previous two tables to get each course that user has taken
 ,user_course as (
 select distinct
   uu.user_id
+  ,uu.referral_source
   ,cu.course_id
   ,cu.unit_id
 from user_unit uu
@@ -41,6 +45,7 @@ left join course_unit cu
 select
   distinct
   uc.user_id
+  ,uc.referral_source
   ,cu.*
   ,uu.max_score
 from user_course uc
@@ -51,32 +56,22 @@ left join user_unit uu
 )
 
 -- Calculate completion for each unit
--- If unit completion >= 100, unit passed
+-- If unit completion > 100, unit passed
 -- If unit competion is not null, unit has been taken by user
 -- If unit is under a course that has been taken by user, unit is an assigned unit
 ,calcs as (
   select
     user_id
     ,course_id
+    ,referral_source
     ,course_title
     ,unit_duration_in_mins_course
     ,count(distinct case when max_score >= 100 then unit_id end) as completed_units
     ,count(distinct case when max_score is not null then unit_id end) as taken_units
     ,count(distinct unit_id) as assigned_units
   from user_course_score
-  group by 1,2,3,4
-)
-
---Add in referral source
-,final as (
-  select
-  c.*
-  ,bd.referral_source
-  from calcs c
-  left join  `EdTech_Data.users_basic_details` bd
-    on c.user_id = bd.user_id
-  order by user_id, course_id
+  group by 1,2,3,4,5
 )
 
 select *
-from final
+from calcs
