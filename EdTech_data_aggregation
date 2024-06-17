@@ -1,0 +1,82 @@
+-- Examining Course and Unit Completion for EdTech users
+-- Patrick Brehm
+-- 6/18/24
+
+with
+-- List of units associated with each course, and unit and course durations
+course_unit as (
+select distinct
+  course_id
+  ,course_title
+  ,unit_id
+  ,unit_duration_in_mins as unit_duration_in_mins_unit
+  ,sum(unit_duration_in_mins) over (partition by course_id) as unit_duration_in_mins_course
+ from `nuview-case-study.EdTech_Data.learning_resource_details`
+)
+
+--Units that each user has taken, and max scores for each
+,user_unit as (
+select 
+  user_id
+  ,unit_id
+  ,max(overall_completion_percentage) as max_score
+from `EdTech_Data.day_wise_user_activity` 
+group by 1,2
+)
+
+-- Join previous two tables to get each course that user has taken
+,user_course as (
+select distinct
+  uu.user_id
+  ,cu.course_id
+  ,cu.unit_id
+from user_unit uu
+left join course_unit cu
+  on uu.unit_id = cu.unit_id
+)
+
+-- Join three tables to show user id, course/unit, and max score for each unit
+-- Null will sho
+,user_course_score as (
+select
+  distinct
+  uc.user_id
+  ,cu.*
+  ,uu.max_score
+from user_course uc
+left join course_unit cu
+  on uc.course_id = cu.course_id
+left join user_unit uu
+  on cu.unit_id = uu.unit_id and uc.user_id = uu.user_id
+)
+
+-- Calculate completion for each unit
+-- If unit completion > 100, unit passed
+-- If unit competion is not null, unit has been taken by user
+-- If unit is under a course that has been taken by user, unit is an assigned unit
+,calcs as (
+  select
+    user_id
+    ,course_id
+    ,course_title
+    ,unit_duration_in_mins_course
+    ,count(distinct case when max_score >= 100 then unit_id end) as completed_units
+    ,count(distinct case when max_score is not null then unit_id end) as taken_units
+    ,count(distinct unit_id) as assigned_units
+  from user_course_score
+  group by 1,2,3,4
+)
+
+--Add in referral source
+,final as (
+  select
+  c.*
+  ,bd.referral_source
+  from calcs c
+  left join  `EdTech_Data.users_basic_details` bd
+    on c.user_id = bd.user_id
+  order by user_id, course_id
+)
+
+select *
+from final
